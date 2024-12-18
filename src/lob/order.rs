@@ -1,10 +1,11 @@
 use super::book::Side;
+use crate::lob::sequencer::OrderID;
 use std::cmp::Ordering;
 
 pub struct LimitOrderParams {
-    limit_price: f64,
-    side: Side,
-    quantity: f64,
+    pub limit_price: f64,
+    pub side: Side,
+    pub quantity: f64,
 }
 
 impl LimitOrderParams {
@@ -18,8 +19,8 @@ impl LimitOrderParams {
 }
 
 pub struct MarketOrderParams {
-    side: Side,
-    quantity: f64,
+    pub side: Side,
+    pub quantity: f64,
 }
 
 impl MarketOrderParams {
@@ -36,12 +37,12 @@ pub enum OrderRequest {
 #[derive(Debug)]
 pub struct OrderContainer {
     pub size: f64,
-    pub order_id: String,
+    pub order_id: OrderID,
     remaining_size: f64,
 }
 
 impl OrderContainer {
-    pub fn new(size: f64, order_id: String) -> Self {
+    pub fn new(size: f64, order_id: OrderID) -> Self {
         Self {
             size,
             order_id,
