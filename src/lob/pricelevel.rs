@@ -74,26 +74,29 @@ impl PriceLevel {
 
     #[inline]
     pub fn make(&mut self, order: OrderContainer) {
+        self.volume += order.size;
         self.orders.push(order);
     }
 
     #[inline]
     pub fn take(&mut self, qty: f64) -> (FillEvents, f64) {
         let mut order_idx_to_drain_upto: usize = 0;
-        let mut taken_total = 0.0;
+        let mut total_taken = 0.0;
         let mut remaining_qty = qty;
 
         let mut fill_events = FillEvents::new(self.orders.len());
 
         for order in &mut self.orders {
-            let (left, order_remaining_size, taken) = order.take_qty(remaining_qty);
-            remaining_qty = left;
+            let (qty_left_after_taking, order_remaining_size, taken) =
+                order.take_qty(remaining_qty);
+            remaining_qty = qty_left_after_taking;
 
             if taken == 0.0 {
                 break;
             }
 
-            taken_total += taken;
+            total_taken += taken;
+            self.volume -= taken;
 
             let order_id = std::mem::take(&mut order.order_id);
             fill_events.0.push(FillEvent {
@@ -111,7 +114,11 @@ impl PriceLevel {
         }
 
         self.orders.drain(0..order_idx_to_drain_upto);
-        (fill_events, qty - taken_total)
+        (fill_events, qty - total_taken)
+    }
+
+    pub fn num_orders_in_queue(&self) -> usize {
+        self.orders.len()
     }
 }
 
@@ -136,4 +143,70 @@ pub enum TakeError {
     NotEnoughVolume,
     #[error("cannot take zero quantity")]
     ZeroQuantity,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_make_new_price_level() {
+        let mut pl = PriceLevel::new(10.0, 0.0);
+        let order1 = OrderContainer::new(100.0, 1);
+        let order2 = OrderContainer::new(201.0, 2);
+
+        pl.make(order1);
+        assert_eq!(pl.volume, 100.0);
+        assert_eq!(pl.price, 10.0);
+        assert_eq!(pl.num_orders_in_queue(), 1);
+
+        pl.make(order2);
+        assert_eq!(pl.volume, 301.0);
+        assert_eq!(pl.price, 10.0);
+        assert_eq!(pl.num_orders_in_queue(), 2);
+    }
+
+    #[test]
+    fn test_multi_take_from_existing_price_level() {
+        let mut pl = PriceLevel::new(10.0, 0.0);
+        let order1 = OrderContainer::new(100.0, 1);
+        let order2 = OrderContainer::new(200.0, 2);
+
+        pl.make(order1);
+        pl.make(order2);
+        assert_eq!(pl.volume, 300.0);
+
+        let (fill_events, left_after_taking) = pl.take(50.0);
+        assert_eq!(fill_events.0.len(), 1);
+        assert_eq!(left_after_taking, 0.0);
+        assert_eq!(pl.num_orders_in_queue(), 2);
+        assert_eq!(pl.volume, 250.0);
+
+        pl.take(50.0);
+        assert_eq!(fill_events.0.len(), 1);
+        assert_eq!(left_after_taking, 0.0);
+        assert_eq!(pl.num_orders_in_queue(), 1);
+        assert_eq!(pl.volume, 200.0);
+
+        let (fill_events, left_after_taking) = pl.take(250.0);
+        assert_eq!(fill_events.0.len(), 1);
+        assert_eq!(left_after_taking, 50.0);
+        assert_eq!(pl.num_orders_in_queue(), 0);
+        assert_eq!(pl.volume, 0.0);
+    }
+
+    #[test]
+    fn test_take_price_level_with_too_small_liquidity() {
+        let mut pl = PriceLevel::new(10.0, 0.0);
+        let order = OrderContainer::new(10.0, 1);
+        pl.make(order);
+        assert_eq!(pl.volume, 10.0);
+        assert_eq!(pl.num_orders_in_queue(), 1);
+
+        let (fill_events, left_after_taking) = pl.take(11.0);
+        assert_eq!(pl.volume, 0.0);
+        assert_eq!(left_after_taking, 1.0);
+        assert_eq!(fill_events.0.len(), 1);
+        assert_eq!(pl.num_orders_in_queue(), 0);
+    }
 }
