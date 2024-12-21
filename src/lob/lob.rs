@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::lob::book::Book;
 use crate::lob::book::Side;
-use crate::lob::order::{OrderContainer, OrderRequest}; // TODO:  fixup
+use crate::lob::order::{OrderContainer, OrderRequest};
 use crate::lob::sequencer::{OrderID, OrderSequencer};
 
 pub struct LimitOrderBook<S: OrderSequencer> {
@@ -25,40 +25,35 @@ impl<S: OrderSequencer> LimitOrderBook<S> {
         }
     }
 
-    pub fn place_order_in_book(
-        &mut self,
-        order: OrderRequest,
-    ) -> Result<OrderResult, PlaceOrderError> {
-        let order_sequence_id = self.order_sequencer.next_order_id();
+    pub fn place_order(&mut self, order: OrderRequest) -> Result<OrderResult, PlaceOrderError> {
+        let order_id = self.order_sequencer.next_order_id();
 
         match order {
             OrderRequest::Limit(params) => {
-                let order_container = OrderContainer::new(params.quantity, order_sequence_id);
+                let order_container = OrderContainer::new(params.quantity, order_id);
 
                 let book = match params.side {
                     Side::Buy => &self.bids,
                     Side::Sell => &self.asks,
                 };
 
-                let mut guard = book.lock().expect("BUG: failed to take lock");
-                guard.place_maker_limit_order(params.limit_price, order_container);
+                let mut book = book.lock().expect("BUG: failed to take lock");
+                book.make(params.limit_price, order_container);
             }
             OrderRequest::Market(params) => {
-                let order_container = OrderContainer::new(params.quantity, order_sequence_id);
+                let order_container = OrderContainer::new(params.quantity, order_id);
 
                 let book = match params.side {
                     Side::Buy => &self.asks,
                     Side::Sell => &self.bids,
                 };
 
-                let mut guard = book.lock().expect("BUG: failed to take lock");
-                let _ = guard.place_taker_market_order(order_container);
+                let mut book = book.lock().expect("BUG: failed to take lock");
+                let _ = book.take(order_container.size); // TODO: properly handle the errors upstream
             }
         }
 
-        Ok(OrderResult {
-            order_id: order_sequence_id,
-        })
+        Ok(OrderResult { order_id })
     }
 }
 
