@@ -23,3 +23,28 @@ impl OrderSequencer for AtomicMonotonicSequencer {
         self.counter.fetch_add(1, Ordering::SeqCst)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_atomic_monotonic_sequencer_sanity_check() {
+        let sequencer = Arc::new(AtomicMonotonicSequencer::new());
+        let threads: Vec<_> = (0..10)
+            .map(|_| {
+                let sequencer = sequencer.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..10 {
+                        sequencer.next_order_id();
+                    }
+                })
+            })
+            .collect();
+
+        threads.into_iter().for_each(|t| t.join().unwrap());
+
+        assert_eq!(sequencer.next_order_id(), 101);
+    }
+}
