@@ -1,6 +1,7 @@
 use crate::connectivity::TradingServer;
 use crate::engine::trading_engine::TradingEngine;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use async_trait::async_trait;
 use std::sync::Arc;
 
 const MAX_DEFAULT_HTTP_CONNECTIONS: u32 = 100;
@@ -29,11 +30,15 @@ impl HTTPTradingServer {
     }
 }
 
+#[async_trait]
 impl<T> TradingServer<T> for HTTPTradingServer
 where
     T: TradingEngine + Send + Sync + 'static,
 {
-    async fn run(&self, trading_engine: Arc<T>) -> std::io::Result<()> {
+    async fn run(
+        &self,
+        trading_engine: Arc<T>,
+    ) -> impl std::future::Future<Output = std::io::Result<()>> + Send {
         let address = format!("{}:{}", self.host, self.port);
 
         let trading_engine_data = web::Data::new(Arc::clone(&trading_engine));

@@ -1,11 +1,14 @@
 pub mod http;
 
-use crate::engine::trading_engine::{self, TradingEngine};
+use async_trait::async_trait;
+
+use crate::engine::trading_engine::TradingEngine;
 use std::sync::Arc;
 
+#[async_trait]
 pub trait TradingServer<T>: Sync + Send
 where
-    T: trading_engine::TradingEngine + 'static,
+    T: TradingEngine + Sync + Send + 'static,
 {
     fn run(
         &self,
